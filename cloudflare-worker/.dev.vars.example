@@ -1,0 +1,3 @@
+TELEGRAM_BOT_TOKEN=replace-with-a-new-botfather-token
+TELEGRAM_WEBHOOK_SECRET=replace-with-a-new-random-webhook-secret
+AVALAI_API_KEY=replace-with-a-new-avalai-key

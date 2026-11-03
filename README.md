@@ -6,8 +6,8 @@ It creates manual-copy drafts for Telegram, X, and Instagram using AvalAI.
 ## Repository layout
 
 - `local-bot/` — the working Python laptop version that uses Telegram long polling.
-- `cloudflare-worker/` — reserved for the online webhook version for Cloudflare
-  Workers, Queues, and D1.
+- `cloudflare-worker/` — deployable online webhook version for Cloudflare
+  Workers and a SQLite-backed Durable Object.
 
 The Python version is preserved and can still be run locally. It cannot be
 deployed directly as a Cloudflare Worker because it relies on a continuously
@@ -26,4 +26,4 @@ See [`local-bot/README.md`](local-bot/README.md) for setup and usage.
 ## Cloudflare version
 
 See [`cloudflare-worker/README.md`](cloudflare-worker/README.md). The online
-implementation will live there without replacing the laptop version.
+implementation is independent from the laptop version.
