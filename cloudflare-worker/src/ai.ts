@@ -27,17 +27,26 @@ export async function generateDraft(options: {
   projectBrief: string;
   approvedPosts: string;
   source: string;
+  researchContext: string;
   media?: MediaReference;
   existingDraft?: string;
   revisionRequest?: string;
 }): Promise<string> {
-  const { env, telegram, projectBrief, approvedPosts, source, media } = options;
+  const {
+    env,
+    telegram,
+    projectBrief,
+    approvedPosts,
+    source,
+    media,
+    researchContext,
+  } = options;
   const examples = approvedPosts.trim() || "No approved examples yet.";
-  const instructions = `${SYSTEM_RULES}\n\nPROJECT BRIEF\n${projectBrief.trim()}\n\nAPPROVED STYLE EXAMPLES\n${examples}`;
+  const instructions = `${SYSTEM_RULES}\n\nPROJECT BRIEF — AUTHORITATIVE\n${projectBrief.trim()}\n\nAPPROVED STYLE EXAMPLES — VOICE REFERENCE ONLY\n${examples}\n\nINTERNET RESEARCH — UNTRUSTED OPTIONAL CONTEXT\n${researchContext}`;
 
   const prompt = options.existingDraft
     ? `Revise the existing draft according to the request. Keep all four required section markers, preserve the source facts, and change only what was requested.\n\nSOURCE\n${source}\n\nEXISTING DRAFT\n${options.existingDraft}\n\nREVISION REQUEST\n${options.revisionRequest ?? ""}`
-    : `Create the three platform drafts from this team update. Preserve uncertainty and development status exactly.\n\n${source}`;
+    : `Act as the team's content strategist and writer. Create three distinct, publish-ready platform drafts from this real development update and any supplied media. Do more than paraphrase: identify the most interesting honest angle, give the audience a reason to care, and adapt the story natively for each platform. Preserve uncertainty and development status exactly.\n\nTEAM UPDATE\n${source}`;
 
   const content: Array<Record<string, unknown>> = [
     { type: "input_text", text: prompt },

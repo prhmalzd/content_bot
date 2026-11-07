@@ -11,6 +11,11 @@ export interface Env {
   MONTHLY_GENERATION_LIMIT: string;
   APPROVED_POSTS_MAX_CHARS: string;
   MAX_IMAGE_BYTES: string;
+  RESEARCH_ENABLED: string;
+  RESEARCH_CACHE_DAYS: string;
+  DAILY_RESEARCH_LIMIT: string;
+  MONTHLY_RESEARCH_LIMIT: string;
+  RESEARCH_MAX_RESULTS: string;
   ALLOWED_CHAT_ID: string;
   CONTENT_TOPIC_ID: string;
   BOT_USERNAME: string;
@@ -87,4 +92,18 @@ export interface GenerationJob {
   loadingMessageId: number;
   draft?: string;
   revisionRequest?: string;
+}
+
+export interface ResearchSource {
+  title: string;
+  url: string;
+  snippet: string;
+  date?: string;
+}
+
+export interface ResearchCacheEntry {
+  topic: string;
+  query: string;
+  createdAt: number;
+  sources: ResearchSource[];
 }

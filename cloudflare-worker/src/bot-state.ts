@@ -19,12 +19,19 @@ import {
   stripQuickTrigger,
 } from "./helpers";
 import { TelegramClient } from "./telegram";
+import {
+  cachedResearch,
+  formatResearch,
+  researchTopic,
+  searchResearch,
+} from "./research";
 import type {
   DraftRecord,
   Env,
   FlowState,
   GenerationJob,
   MediaReference,
+  ResearchCacheEntry,
   TelegramCallbackQuery,
   TelegramMessage,
   TelegramUpdate,
@@ -34,6 +41,8 @@ const JOBS_KEY = "generation-jobs";
 const USAGE_KEY = "generation-events";
 const APPROVED_KEY = "approved-posts";
 const SEEN_UPDATES_KEY = "seen-updates";
+const RESEARCH_CACHE_KEY = "research-cache";
+const RESEARCH_USAGE_KEY = "research-events";
 
 export class BotState extends DurableObject<Env> {
   private readonly telegram: TelegramClient;
@@ -65,12 +74,14 @@ export class BotState extends DurableObject<Env> {
 
     try {
       const approved = (await this.ctx.storage.get<string>(APPROVED_KEY)) ?? "";
+      const research = await this.researchForSource(job.source);
       const draft = await generateDraft({
         env: this.env,
         telegram: this.telegram,
         projectBrief,
         approvedPosts: approved,
         source: job.source,
+        researchContext: formatResearch(research),
         media: job.media,
         existingDraft: job.kind === "revise" ? job.draft : undefined,
         revisionRequest: job.revisionRequest,
@@ -444,10 +455,88 @@ export class BotState extends DurableObject<Env> {
 
   private async sendUsage(message: TelegramMessage): Promise<void> {
     const { daily, monthly } = await this.usageCounts();
+    const research = await this.researchUsageCounts();
     await this.telegram.sendMessage(
       message.chat.id,
-      `Cloud AI generation usage (UTC):\nToday: ${daily}/${positiveInteger(this.env.DAILY_GENERATION_LIMIT, 30)}\nThis month: ${monthly}/${positiveInteger(this.env.MONTHLY_GENERATION_LIMIT, 300)}\nMaximum output: ${positiveInteger(this.env.AI_MAX_OUTPUT_TOKENS, 900)} tokens\nImage detail: ${this.env.AI_IMAGE_DETAIL || "low"}`,
+      `Cloud usage (UTC):\nAI generations today: ${daily}/${positiveInteger(this.env.DAILY_GENERATION_LIMIT, 30)}\nAI generations this month: ${monthly}/${positiveInteger(this.env.MONTHLY_GENERATION_LIMIT, 300)}\nFresh research searches today: ${research.daily}/${positiveInteger(this.env.DAILY_RESEARCH_LIMIT, 10)}\nFresh research searches this month: ${research.monthly}/${positiveInteger(this.env.MONTHLY_RESEARCH_LIMIT, 100)}\nMaximum output: ${positiveInteger(this.env.AI_MAX_OUTPUT_TOKENS, 900)} tokens\nImage detail: ${this.env.AI_IMAGE_DETAIL || "low"}`,
       message.message_thread_id,
+    );
+  }
+
+  private async researchForSource(
+    source: string,
+  ): Promise<ResearchCacheEntry | undefined> {
+    if ((this.env.RESEARCH_ENABLED || "true").toLowerCase() !== "true") {
+      return undefined;
+    }
+    const topic = researchTopic(source);
+    const cache =
+      (await this.ctx.storage.get<ResearchCacheEntry[]>(RESEARCH_CACHE_KEY)) ?? [];
+    const cached = cachedResearch(
+      cache,
+      topic,
+      positiveInteger(this.env.RESEARCH_CACHE_DAYS, 7),
+    );
+    if (cached) return cached;
+    if (!(await this.researchAvailable())) return undefined;
+
+    await this.recordResearchAttempt();
+    try {
+      const result = await searchResearch(this.env, topic);
+      if (!result) return undefined;
+      const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      const updated = [
+        result,
+        ...cache.filter(
+          (entry) => entry.topic !== topic && entry.createdAt >= cutoff,
+        ),
+      ].slice(0, 24);
+      await this.ctx.storage.put(RESEARCH_CACHE_KEY, updated);
+      return result;
+    } catch (error) {
+      console.warn(
+        "Optional research failed",
+        error instanceof Error ? error.name : "UnknownError",
+      );
+      return undefined;
+    }
+  }
+
+  private async researchAvailable(): Promise<boolean> {
+    const counts = await this.researchUsageCounts();
+    return (
+      counts.daily < positiveInteger(this.env.DAILY_RESEARCH_LIMIT, 10) &&
+      counts.monthly < positiveInteger(this.env.MONTHLY_RESEARCH_LIMIT, 100)
+    );
+  }
+
+  private async researchUsageCounts(): Promise<{
+    daily: number;
+    monthly: number;
+  }> {
+    const events =
+      (await this.ctx.storage.get<number[]>(RESEARCH_USAGE_KEY)) ?? [];
+    const now = new Date();
+    const dayStart = Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+    );
+    const monthStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
+    return {
+      daily: events.filter((timestamp) => timestamp >= dayStart).length,
+      monthly: events.filter((timestamp) => timestamp >= monthStart).length,
+    };
+  }
+
+  private async recordResearchAttempt(): Promise<void> {
+    const events =
+      (await this.ctx.storage.get<number[]>(RESEARCH_USAGE_KEY)) ?? [];
+    const now = Date.now();
+    const retention = now - 40 * 24 * 60 * 60 * 1000;
+    await this.ctx.storage.put(
+      RESEARCH_USAGE_KEY,
+      [...events.filter((timestamp) => timestamp >= retention), now],
     );
   }
 

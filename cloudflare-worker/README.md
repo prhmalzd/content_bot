@@ -19,6 +19,9 @@ container is required.
 - Optional chat restriction, output-topic routing, mentions, and hashtag trigger.
 - Daily and monthly generation limits.
 - Telegram update deduplication and a small persistent generation queue.
+- Automatic, cached topic and hashtag research when useful.
+- Professional platform-native writing that develops a content angle instead of
+  merely polishing the submitted text.
 
 ## Cloudflare build settings
 
@@ -62,6 +65,27 @@ BOT_USERNAME          bot username without @
 ALLOWED_CHAT_ID       group ID, or blank during setup
 CONTENT_TOPIC_ID      output topic ID, or blank to reply in the source topic
 ```
+
+Research is automatic and does not add another Telegram command or question to
+the `/createpost` flow. The Worker attempts at most one AvalAI Firecrawl search
+for a new topic, stores compact source notes in the Durable Object for seven
+days, and reuses them for related posts. If search is unavailable or a limit is
+reached, generation continues using the project brief, update, media, and
+approved style memory.
+
+Research safeguards and budgets are configured in `wrangler.jsonc`:
+
+```text
+RESEARCH_ENABLED          true
+RESEARCH_CACHE_DAYS       7
+DAILY_RESEARCH_LIMIT      10
+MONTHLY_RESEARCH_LIMIT    100
+RESEARCH_MAX_RESULTS      5
+```
+
+The search context is treated as untrusted. It may improve framing,
+terminology, and hashtag selection, but cannot establish facts about the game
+or override the project brief.
 
 Keep `ALLOWED_CHAT_ID` blank initially. After registering the webhook, run
 `/where` in Telegram, place the returned chat ID in `wrangler.jsonc`, and push
